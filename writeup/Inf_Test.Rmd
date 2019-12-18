@@ -1,0 +1,35 @@
+---
+title: "Untitled"
+author: "Kingsley"
+date: "18 December 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r rsetup, warning=FALSE}
+library(here)
+```
+
+
+
+
+### Classification accuracy
+
+```{r accuracy_stats, eval = TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load(here("analysis/Model_Acc_Inf_CI.Rdata"))
+# load(here("analysis/Model_Acc_cell_CI.Rdata"))
+
+```
+The data provided evidence that aiding increased classifiaction accuracy in the static display, *M* = `r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_M[1])*100))`%, 95th percentile HDI [`r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_lb[1])*100))`%,`r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_ub[1])*100))`%].
+
+The dynamic display provided a smaller  increase in classification accuracy compared to the static display,  *M* = `r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_M[2])*100))`%, whith a 95th percentile HDI that included zero [`r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_lb[2])*100))`%,`r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_ub[2])*100))`%].
+
+The data indicated that the effect of aiding based on the current dynamic display did not reliably differ from the effect of aiding based on a static display,  *M* = `r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_M[3])*100))`%, 95th percentile HDI [`r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_lb[3])*100))`%,`r sprintf(sprintf("%.1f",(Model_Acc_inf$Acc_inf_ub[3])*100))`%].
+
+
+
+

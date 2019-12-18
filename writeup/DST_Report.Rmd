@@ -1,0 +1,609 @@
+---
+title: "OSU Uncertainy Experiment"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, eval=TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(magrittr))
+library(BayesFactor, quietly = TRUE)
+library(cowplot)
+library(dplyr)
+library(tidyr)
+library(reshape2)
+library(psych)
+library(caret)
+library(e1071)
+library(scales)
+library(gridExtra)
+library(kableExtra)
+library(webshot)
+library(tinytex)
+library(here)
+
+my_theme = theme(
+  axis.title.x = element_text(size = 14),
+  axis.text.x = element_text(size = 12),
+  axis.title.y = element_text(size = 14),
+  axis.text.y = element_text(size = 12), 
+  legend.text = element_text(size=12), 
+  legend.title = element_blank())
+
+# p = dirname(rstudioapi::getSourceEditorContext()$path)
+# setwd(p)
+
+
+```
+
+
+# Introduction
+
+An important aspect of military decision making is identifying whether contacts are friendly, hostile, or civilian. Often this is done by integrating information from multiple sources, each of which have some level of uncertainty. Identification decisions may need to be made based on a single set of observations or it may be possible to make multiple observations over time before a decision is made. Unfortunately people are often poor at aggregating multiple cues, with performance often falling far short of statistically optimal levels. This may result from a failure to attend to some information sources (refs) or to appropriately weight and integrate information sources (refs). This effect can occur both in situations where a decision needs to be made based on multiple cues which are presented simultaneously and where a decision needs to be made based on cues that update over time.
+
+* Examples of static decision tasks.
+* Examples of dynamic decision tasks.
+
+People also have difficulty incorporating base rates, which can affect decision accuracy when identifying objects or events with different rates of occurrence. Identification judgments tend toward unbiasedness, even when the task demands biased responses. This effect is know as the *sluggish beta* phenomenon (Wickens et al. 2016) and can cause poor accuracy even if participant decision sensitivity is high.
+
+Optimistically, technology would allow human-machine systems to bypass these difficulties. Given a model of the world -- knowledge about event base rates in the environment and the distribution of information cues corresponding to various classes of event -- an automated or computerized decision aid can integrate information in a statistically ideal fashion, offloading task demands from the human decision maker. In many cases, however, system designers might be reluctant to allocate full decision responsibility to an automated system, preferring to keep a human in the decision-making loop. This implies that the decision aid will be valuable only to the extent that the human operators trust and uses it appropriately. Frequently, they do not. As discussed below, decision makers often tend to distrust and disregarded or over-rely on automated or statistical decisions aids.  
+
+* Examples of identification decision aids
+* Possible reasons for failures
+
+To explore these issues further, the current experiment explored the effects of dynamic information display and probabilistic decision aiding on decision making in a multi-cue signal classification task. In each trial, a signal was drawn from one of three stimulus categories. Probabilistic cues representing aspects of the chosen stimulus were displayed on a set of three visual gauges, and participants viewing the gauges were asked to decide which category the stimulus was drawn from. In one display condition, participants received a single reading on each gauge per trial. In a second display condition, gauge readings were updated at discrete intervals, giving participants the chance to accrue information over time. Each participant performed the task unaided for one block and with the assistance of a computerised decision aid in another block of trials. The aid aggregated the three gauge readings with information about event base rates, mitigating the need for participants to integrate the gauge readings or base rates themselves. In one aid type the aid displayed the probability of each stimulus category based on the current gauge readings only. In a second aid type the aid displayed the probability of each stimulus category based on the current and past gauge readings, mitigating the need for participants to integrate the gauge readings over time. 
+
+The current experiment aimed to answer the following questions:  
+
+* What was the effect of going from a static to a dynamic display without decision aiding? 
+* What was the effect of aiding for each aid type (current, cumulative)?
+* How optimally were participants able to integrate the gauge readings in each display and aiding condition?
+* How were the above effects influenced by signals of different levels of discriminability?
+
+
+# Method
+## Participants
+Participants were 129 undergraduate students recruited from the participant pool at Oregon State University. Data from an additional 16 participants were unusable, either because the participant failed to complete the entire experiment or because experimenter error resulted in the participant being assigned to an incorrect experimental condition in one block of trials. 
+
+
+## Apparatus and stimuli
+Stimuli were presented on 24-inch monitors and viewed from a distance of approximately 67 cm, though viewing distance was unconstrained.  
+
+Stimuli were displays of three horizontal gauges. Each gauge included a series of yellow ticks along the bottom. Ticks were spaced differently and arbitrarily on each of the three gauges, and were included strictly to encourage the perception that the three gauges represented three different variables. Each gauge also included a single yellow pointer. As discussed below, a response prompt and a set of three text boxes appeared beneath the gauges. In some blocks of trials, probability labels generated by an automated decision aid also appeared beneath the text boxes. Figure \@ref(fig:samplestim) presents a pair of sample stimuli, one without and one with the probability labels.  
+
+```{r samplestim, echo=FALSE, fig.cap="Sample stimulus displays.", out.width="50%"}
+
+knitr::include_graphics("Fig_SampleStim.png")
+
+```
+
+
+
+## Procedure
+Participants were asked to imagine they were counterintelligence agents monitoring radio transmissions, and that their job was to classify the source of each signal as friendly, civilian, or hostile. The instructions went on to explain that, "Unfortunately, hostile sources are trying to disguise their signals as civilian, which makes them hard to recognize. In fact, it is almost impossible to tell the sources apart with 100% accuracy."  
+
+Participants were asked to make their judgment each trial on the basis of the reading displayed on a set of three gauges. Readings on all three gauges represented the same stimulus category. Readings were sampled randomly and independently from normal probability distributions with a standard deviation of 1.  
+
+Distributions representing the three classes of events differed in their means, and differed across the three gauges. Table 1 reports the details of the distributions from which evidence values were sampled. Figure \@ref(fig:dists) presents a graphical representation of those distributions.
+
+Table: (\#tab:Table-1) Characteristics of probability distributions from which evidence values were sampled.
+
+|              |Friendly    |Civilian    |Hostile     |  
+|:------------:|:----------:|:----------:|:----------:|  
+|Top gauge     |N(-0.50, 1) |N(0.25, 1)  |N(0.50, 1)  |  
+|Middle gauge  |N(-0.75, 1) |N(0.00, 1)  |N(0.25, 1)  |   
+|Bottom gauge  |N(-0.25, 1) |N(0.75, 1)  |N(0.25, 1)  |  
+
+```{r dists, echo=FALSE, fig.cap = "Evidence distributions corresponding to the three stimulus categories.",  fig.width=4}
+
+color <- c('green4', 'grey30', 'red')
+g <- c(-.5, .25, .5)
+gauge1 <- ggplot(NULL, aes(c(-3,3))) +
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[1], sd = 1), color = color[1]) + 
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[2], sd = 1), color = color[2]) + 
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[3], sd = 1), color = color[3]) + 
+  annotate(geom = "text", x = g[1]-.7, y = dnorm(g[1], g[1], 1) * 1, label= "Friendly", color = color[1], hjust = 0.5, size = 4.5) +
+  annotate(geom = "text", x = g[2], y = dnorm(g[2], g[2], 1) * 1.075, label= "Civilian", color = color[2], hjust = 0.5, size = 4.5) +
+  annotate(geom = "text", x = g[3]+.7, y = dnorm(g[3], g[3], 1) * 1, label= "Hostile", color = color[3], hjust = 0.5, size = 4.5) +
+  annotate(geom = "text", x = -3.25, y = dnorm(g[3], g[3], 1) * .9, label= "Top\ngauge", color = "black", hjust = 0, size = 5) +
+  ylab("Density") +
+  theme(axis.title.x=element_blank(), 
+        #axis.text.x=element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank(), 
+        aspect.ratio = 1/4)
+
+g <- c(-.75, 0, .25)
+gauge2 <- ggplot(NULL, aes(c(-3,3))) +
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[1], sd = 1), color = color[1]) + 
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[2], sd = 1), color = color[2]) + 
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[3], sd = 1), color = color[3]) + 
+  annotate(geom = "text", x = g[1]-.7, y = dnorm(g[1], g[1], 1) * 1, label= "Friendly", color = color[1], hjust = 0.5, size = 4.5) +
+  annotate(geom = "text", x = g[2], y = dnorm(g[2], g[2], 1) * 1.075, label= "Civilian", color = color[2], hjust = 0.5, size = 4.5) +
+  annotate(geom = "text", x = g[3]+.7, y = dnorm(g[3], g[3], 1) * 1, label= "Hostile", color = color[3], hjust = 0.5, size = 4.5) +
+  annotate(geom = "text", x = -3.25, y = dnorm(g[3], g[3], 1) * .9, label= "Middle\ngauge", color = "black", hjust = 0, size = 5) +
+  ylab("Density") +
+  theme(axis.title.x=element_blank(), 
+        #axis.text.x=element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank(), 
+        aspect.ratio = 1/4)
+
+g <- c(-.25, .75, .25)
+gauge3 <- ggplot(NULL, aes(c(-3,3))) +
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[1], sd = 1), color = color[1]) + 
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[2], sd = 1), color = color[2]) + 
+  geom_line(stat = "function", fun = dnorm, args = list(mean = g[3], sd = 1), color = color[3]) + 
+  annotate(geom = "text", x = g[1]-.7, y = dnorm(g[1], g[1], 1) * 1., label= "Friendly", color = color[1], hjust = .5, size = 4.5) +
+  annotate(geom = "text", x = g[2]+.7, y = dnorm(g[2], g[2], 1) * 1, label= "Civilian", color = color[2], hjust = .5, size = 4.5) +
+  annotate(geom = "text", x = g[3], y = dnorm(g[3], g[3], 1) * 1.075, label= "Hostile", color = color[3], hjust = .5, size = 4.5) +
+  annotate(geom = "text", x = -3.25, y = dnorm(g[3], g[3], 1) * .9, label= "Bottom\ngauge", color = "black", hjust = 0, size = 5) +
+  ylab("Density") +
+  theme(axis.title.x=element_blank(), 
+        #axis.text.x=element_blank(), 
+        axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank(), 
+        aspect.ratio = 1/4)
+
+plot_grid(gauge1, gauge2, gauge3, nrow = 3)
+```
+
+Discriminability between the classes of events can be assessed using the signal detection measure of sensitivity *d'*, which denotes the difference between equal-variance normal distributions in units of the standard deviation. We use *d'~1~* to denote the discriminability of the friendly and civilian distributions, *d'~2~* to denote the discriminability of the civilian and hostile distributions. Table 2 presents the values of *d'~1~* and *d'~2~* for each gauge.  
+
+Table: (\#tab:Table-2) Discriminability of stimulus categories across the three gauges.  
+
+|              |*d'*~1~ |*d'*~2~ |  
+|:------------:|:----:|:----:|  
+|Top gauge     |.75  |.25   |  
+|Middle gauge |.75   |.25  |  
+|Bottom gauge |. 5   |.5   |  
+
+Colored zones on each gauge demarcated the regions of highest likelihood for each class of signal. More specifically, the colored zones covered the space from -0.25 below the mean to 0.25 above the mean of each distribution. The colored zone corresponding to the evidence distribution for friendly signals appeared in green on each gauge, the zone corresponding to the distribution for civilian sources appeared in light gray, and the zone corresponding to hostile sources appeared in red. Instructions explained that the colored zones represented the average reading corresponding to each source.    
+
+The true state of the stimulus was determined randomly each trial, with base rates varying across categories: the categories Friendly and Hostile were each chosen with probability *p* = .15, and the category Civilian was chosen with the probability *p* = .70. Because the readings on the three gauges were sampled independently but represented the same stimulus category, the participants' ideal strategy was to render judgments based on a combination of the gauge values. Instructions explained, "What makes the task difficult is that the readings are very noisy, and readings on the three gauges may not always match very closely. To make your judgments, you will need to combine the three readings in your head to decide which source is the best match on average." The participant rendered a judgment each trial by mouse clicking on one of three text boxes, labeled 'Friendly', 'Civilian', and 'Hostile', underneath the gauges.  
+
+Participants performed either of two variants of the classification task. In the static display condition, the participant viewed a single set of gauge readings each trial. In the dynamic display condition, readings were updated over time. To begin each trial, a set of three readings was presented. The readings were then updated at randomly determined times. At each update for a given gauge, a new reading value was sampled from the appropriate distribution and the white pointer shifted its position to reflect the new sample value. The time between updates was determined by a shifted exponential distribution with a base time of 0.5 seconds and an exponential distribution rate of 1/3. This choice of parameters led to a minimum interval of 0.5 seconds between consecutive updates on a given gauge, and a mean interval of 3.5 seconds. Because the exponential distribution is memoryless, the use of a shifted exponential ensured that the time between updates was unpredictable beyond the base time. Update times were determined independently for the three gauges, meaning that updates occurred asynchronously across gauges.  
+
+Participants also performed the task either with or without the assistance of an automated decision aid that helped them to integrate and interpret the gauge readings. More specifically, the aid reported the probability of each of the three response options, conditional on the sampled evidence values. It operated by calculating the likelihood of each signal category given the sampled values, them multiplying the likelihood by prior probability of the corresponding category. In the static display condition, probability estimates did not change throughout the course of the trial. In the dynamic display conditions, the probability estimates  were updated any time a gauge reading was updated.  
+
+Each participant completed four blocks of trials, two practice blocks of five minutes each, and two experimental blocks of 15 minutes each. In the first practice block, the participant performed the task unaided. In the second practice block, the participant performed the task with assistance from the automated decision aid. Finally, the participant performed one experimental block each with and without the aid, with the order of the aided and unaided blocks randomized across participants. The length of the blocks was set by time, rather than by number of trials, so as not to encourage participants to rush through trials.  
+
+To help participants familiarize themselves with the task, the standard deviation of the stimulus evidence distributions was set .05 to start the first practice block, then increased by .05 each trial thereafter until reaching a value of 1. Stimulus discriminability thus decreased over the course of 20 trials from near-perfect levels to the level used for experimental testing.  
+
+After completing all four blocks of trials, each participant was debriefed and dismissed.  
+
+
+## Dependent measures  
+The analysis focused on the percentage of trials that were classified correctly, the difference between classification accuracy and benchmark accuracy based on the statistically optimal integration of cumulative gauge readings at the time of each classification decision, the hit rate and false alarm rate for Friendly and Hostile signals, the difference between actual and benchmark hit and false alarm rate, and response time.  
+
+
+## Analysis
+Data were analyzed using Bayesian hypothesis tests with default priors [@rouderDefaultBayesFactors2012; @rouderBayesianTestsAccepting2009]. In place of *p*-values, Bayesian hypothesis tests produce *Bayes factors*, likelihood ratios that indicate the degree to which data favor one model relative to another. The models under comparison were always a null model that excluded an effect of interest, and an alternative model that included the effect. A Bayes factor value of less than 1.0 favors the null model over the alternative, a value of 1.0 is perfectly indifferent between models, and a value greater than 1.0 favors the alternative model over the null. Bayes factor values are labeled using the criteria recommended by @rafteryBayesianModelSelection1995. According to these criteria a Bayes factor between one and less than three offers inconclusive support for the alternative model, a Bayes factor between three and 20 offers positive support for the alternative model, a Bayes factor between 20 and 150 offers strong support for the alternative model, and a Bayes factor greater than 150 provides very strong support for the alternative model. 
+
+The analysis examined overall performance based on all signal types and also performance for Friendly and Hostile signals. In each case two Bayesian ANOVA were performed. For the analysis of overall performance the first ANOVA was a 2 (display: static current, dynamic current) x 2 (aiding: none,aided) analysis. This analysis allowed and assessment of the effect of a static vs dynamic display and the effect of aiding based on current gauge readings in both display conditions. The second ANOVA was a 2 (display:dynamic current, dynamic cumulative) x 2 (aiding: none, aided) analysis. This allowed the assessment of the effect of aiding based on cumulative gauge readings in a dynamic display. For the analysis by Friend and Hostile signals similar ANOVA were performed with the addition of a 2 (signal: Friendly, Hostile) factor.
+
+
+# Results
+```{r load_filt_variables, eval=TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load(here("/preprocessing/Filt_variables.Rdata"))
+```
+
+Of the 129 participants with complete data, participants were excluded from data analysis of they met the following criteria:  
+* They received fewer than `r sprintf("%i",sig_trial_limit)` friendly or hostile signal trials in a block. This criterion excluded `r sprintf("%i",low_sig_num)` participants.  
+* They made zero friend or hostile responses in a block. This criterion excluded `r sprintf("%i",mindless_num)` participants.  
+
+In addition, trials where the decision time exceeded `r sprintf("%i",threshold_rt)` seconds were excluded from the analysis. This criterion excluded  `r sprintf("%i",long_rt_num)` trials.  
+
+Initially the results for overall classification accuracy, accuracy relative to benchmark, and response time across all signal types will be presented, followed by the results for Friend and Hostile signals to explore the effects of signals with lower base rates and different discriminability. In each section two analyses will be presented. The first analysis will examine the effects of moving from a static to a dynamic gauge display and of introducing a probabilistic decision aid based on the current gauge readings. The second analysis will examine the effect of introducing a probabilistic decision aid based on the cumulative gauge readings in a dynamic gauge display.  
+
+
+
+```{r accuracy_plot, echo=FALSE, fig.cap="Overall Accuracy by condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=6, fig.height=4.5}
+
+rm(list = ls())
+load(here("/analysis/Accuracy.Rdata"))
+load(here("/analysis/Model_Acc_Cell_CI.Rdata"))
+cmat_accuracy %<>% mutate(condition = recode(condition, Static = "Static, By Event",
+                                    Current = "Dynamic, By Event",
+                                    Cumulative = "Dynamic, Cumulative"))
+pos_dodge = 0.5
+Acc_plot <- ggplot(data = Model_Acc, mapping=aes(x = condition, y = Acc_M, fill = aided)) + 
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=3, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_Acc, mapping=aes(x = condition, ymin = Acc_lb, ymax = Acc_ub),
+                width = .5, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Accuracy", fill = "Aiding") +
+  geom_violin(data = cmat_accuracy, mapping=aes(x = condition, y = resp_acc),alpha = .5, position = position_dodge(pos_dodge)) + 
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(0,1)) +
+  scale_fill_manual(values=c("gold4", "gold1"))
+     # Acc_plot
+     
+
+```
+
+
+```{r benchmark_plot, echo=FALSE, fig.cap="Accuracy by condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=6, fig.height=4.5}
+
+# rm(list = ls())
+load(here("/analysis/Accuracy.Rdata"))
+load(here("/analysis/Model_Acc_Cell_CI.Rdata"))
+cmat_accuracy %<>% mutate(condition = recode(condition, Static = "Static, By Event",
+                                    Current = "Dynamic, By Event",
+                                    Cumulative = "Dynamic, Cumulative"))
+pos_dodge = 0.5
+Norm_dif_plot <- ggplot(data = Model_Acc, mapping=aes(x = condition, y = Opt_dif_M, fill = aided)) + 
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=3, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_Acc, mapping=aes(x = condition, ymin = Opt_dif_lb, ymax = Opt_dif_ub),
+                width = .5, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Accuracy relative to Optimal", fill = "Aiding") +
+  geom_violin(data = cmat_accuracy, mapping=aes(x = condition, y = norm_dif),alpha = .5, position = position_dodge(pos_dodge)) + 
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(-.5,.5)) +
+  scale_fill_manual(values=c("darkorange4", "darkorange1"))
+
+   # Norm_dif_plot
+```
+
+
+```{r rt_plot, echo=FALSE, fig.cap="Mean response time by condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=6, fig.height=4.5}
+
+# rm(list = ls())
+load(here("analysis/RT_cond.Rdata"))
+load(here("/analysis/Model_RT_cond_cell_CI.Rdata"))
+RT_cond %<>% mutate(condition = recode(condition, Static = "Static, By Event",
+                                    Current = "Dynamic, By Event",
+                                    Cumulative = "Dynamic, Cumulative"))
+pos_dodge = 0.5
+RT_cond_plot <- ggplot(dat = Model_RT_cond, mapping=aes (x = condition, y = RT_cond_M, fill = aided)) +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=100, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_RT_cond, mapping=aes(x = condition, ymin = RT_cond_lb, ymax = RT_cond_ub),
+                width = .5, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Seconds", fill = "Aiding") +
+  geom_violin(data = RT_cond, mapping=aes(x = condition, y = RT_mean),alpha = .5, position = position_dodge(pos_dodge)) +
+  theme_classic() + ylim(0, 30) +
+  scale_fill_manual(values=c("darkolivegreen4", "darkolivegreen1"))
+
+ # RT_cond_plot
+```
+
+## Performance across all stimulus types 
+A plot of the overall classification accuracy in each display condition and aiding condition is shown in Figure \@ref(fig:accuracy_plot). A plot of the difference between classification accuracy and benchmark accuracy is shown in Figure \@ref(fig:benchmark_plot). A plot of response time is shown in Figure \@ref(fig:rt_plot).  
+
+```{r overall_plots, echo=FALSE, fig.width=18, fig.height=4.5}
+# grid.arrange(Acc_plot,Norm_dif_plot,RT_cond_plot,ncol=3)
+grid.arrange(Acc_plot,Norm_dif_plot,RT_cond_plot,ncol=3)
+
+```
+
+
+### Classification accuracy
+
+```{r accuracy_stats, eval = TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load(here("analysis/Model_Acc_Inf_CI.Rdata"))
+load(here("analysis/Model_Acc_cell_CI.Rdata"))
+
+```
+The classification accuracy data provided evidence that aiding increased classifiaction accuracy in the static display condition from    `r sprintf(sprintf("%.1f",(((all_acc_mean_cond_aid[3]+all_acc_mean_cond_aid[5])/2)-all_acc_mean_cond_aid[1])*100))`% higher than in the static unaided condition. Aiding based on current gauge readings increased classifcation accuracy by *M* = `r sprintf(sprintf("%.1f",(all_acc_mean_cond_aid[2]-all_acc_mean_cond_aid[1])*100))`%  in the static condition and by  *M* = `r sprintf(sprintf("%.1f",(all_acc_mean_cond_aid[4]-all_acc_mean_cond_aid[3])*100))`% in the dynamic condtion. Aiding based on cuumulative gauge readings increased classification accuracy by  *M* = `r sprintf(sprintf("%.1f",(all_acc_mean_cond_aid[6]-all_acc_mean_cond_aid[5])*100))`% compared to aiding based on current gauge readings.  
+
+### Classification accuracy relative to benchmark performance
+
+
+```{r open_non_cum_bench_acc, eval = TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load("BF_acc_dif.Rdata")
+```
+The data for the difference between classification accuracy and benchmark performance provided positive evidence against a main effect of display, *BF_bench_acc_display* = `r sprintf(sprintf("%.2f",bf_acc_dif_all_cond))`, very strong evidence for a main effect of aiding, *BF_bench_acc_aid* = `r sprintf(sprintf("%.2e",bf_acc_dif_all_aid))`, and strong evidence for a display x aid interaction, *BF_bench_acc_displayxaid* = `r sprintf(sprintf("%.2f",bf_acc_dif_all_interact))`. Aiding allowed participants to reach classification decisions that were closer to optimal accuracy levels in all display conditions but the benefit was greater with cumulative aiding, *M* = `r sprintf(sprintf("%.1f",(all_acc_dif_mean_cond_aid[6]-all_acc_dif_mean_aid[5])*100))`% than with current dynamic aiding,  *M* = `r sprintf(sprintf("%.1f",(all_acc_dif_mean_cond_aid[4]-all_acc_dif_mean_aid[3])*100))`% or current static aiding, *M* = `r sprintf(sprintf("%.1f",(all_acc_dif_mean_cond_aid[2]-all_acc_dif_mean_aid[1])*100))`%.
+
+### Response time
+
+
+```{r open_non_cum_rt, eval = TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load("BF_rt.Rdata")
+```
+The response time data provided positive evidence for a main effect of display, *BF_rt_display* = `r sprintf(sprintf("%.2f",bf_rt_all_cond))`, inconclusive evidence against a main effect of aiding, *BF_rt_aid* = `r sprintf(sprintf("%.2f",bf_rt_all_aid))`, and inconclusive evidence against the presence of a display x aid interaction, *BF_rt_displayxaid* = `r sprintf(sprintf("%.2f",bf_rt_all_interact))`.
+
+<!-- Mean response time increased  `r sprintf(sprintf("%.2f",(all_rt_mean_cond[2]-all_rt_mean_cond[1])))` seconds from *M* = `r sprintf(sprintf("%.2f",all_rt_mean_cond[1]))` seconds in the static display condition to *M* = `r sprintf(sprintf("%.2f",all_rt_mean_cond[2]))` seconds in the current dynamic gauge display condition.  In contrast mean response time decreased `r sprintf(sprintf("%.2f",(all_rt_mean_cond[3]-all_rt_mean_cond[2])))` seconds from *M* = `r sprintf(sprintf("%.2f",all_rt_mean_cond[2]))` seconds in the current dynamic condition to *M* = `r sprintf(sprintf("%.2f",all_rt_mean_cond[3]))` seconds in the cumulative dynamic gauge display condition. -->
+
+### Summary of overall performance results
+These results indicate that the provision of proababalistic aiding increased overall classification accuracy and moved classification accuracy closer to optimal performance without having an effect of classification times. They also indicate that aiding based on cumulative gauge readings was more effective than aiding based on current gauge readings. Dynamic guage displays increased classification accuracy but also increased classification time.
+
+## Analysis by Friendly and Hostile and signals
+The following analyses will examine the effects of gauge display and aiding for Friendly and Hostile signals to identify whether any differences existed between signals with low base rates and different discriminability. Specifically, the hit rate, false alarm rate, the difference between hit and false alarm rate and benchmark levels, and response time will be analysed across Friendly and Hostile signals.
+
+
+### Hit Rate
+A plot of the effects of display condition and aiding on hit rate for Friendly and Hostile signals is shown in Figure \@ref(fig:HR_plot).
+
+```{r HR_plot, echo=FALSE, fig.cap="Hit Rate for Friend and Hostile signals by display condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=12, fig.height=4.5}
+
+rm(list = ls())
+load(here("analysis/Model_HR_cell_CI.Rdata"))
+load(here("analysis/Accuracy.Rdata"))
+cmat_accuracy %<>% mutate(condition = recode(condition, Static = "Static, By Event",
+                                    Current = "Dynamic, By Event",
+                                    Cumulative = "Dynamic, Cumulative"))
+
+# acc_friend = acc_signal %>% filter(signal == "Friendly")
+# acc_hostile = acc_signal %>% filter(signal == "Hostile")
+
+pos_dodge = 0.5
+
+HR_friend_plot <- ggplot(data = Model_HR, mapping=aes(x = condition, y = FHR_M, fill = aided)) + 
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=3, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_HR, mapping=aes(x = condition, ymin = FHR_lb, ymax = FHR_ub),
+                width = .5, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Hit Rate", fill = "Aiding") +
+  geom_violin(data = cmat_accuracy, mapping=aes(x = condition, y = resp_FH),alpha = .5, position = position_dodge(pos_dodge)) + 
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(0,1)) +
+  # stat_summary(fun.y=mean, geom="point", shape=21, size=3, stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("deepskyblue4", "deepskyblue1"))
+
+HR_hostile_plot <- ggplot(data = Model_HR, aes (x = condition, y = HHR_M, fill = aided)) + 
+  geom_dotplot(data = Model_HR, binaxis='y', stackdir='center', dotsize=3, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_HR, mapping=aes(x = condition, ymin = HHR_lb, ymax = HHR_ub),width = .5,
+                position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Hit Rate", fill = "Aiding") +
+  geom_violin(data = cmat_accuracy, mapping=aes(x = condition, y = resp_HH),alpha = .5, position = position_dodge(pos_dodge)) + 
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(0,1)) +
+  # stat_summary(fun.y=mean, geom="point", shape=21, size=3, stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("firebrick4", "firebrick1"))
+
+grid.arrange(HR_friend_plot,HR_hostile_plot,ncol=2)
+
+```
+
+
+
+```{r open_all_HR_params, eval=TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load("BF_all_HR.Rdata")
+```
+The data for hit rate provided strong evidence for a main effect of display, *BF_HR_display* = `r sprintf(sprintf("%.2f",bf_hr_all_cond))`, inconclusive evidence for a main effect of aiding, *BF_HR_aid* = `r sprintf(sprintf("%.2f",bf_hr_all_aid))`, and very strong evidence for a main effect of signal, *BF_HR_signal* = `r sprintf(sprintf("%.2e",bf_hr_all_sig))`. The data provided very strong evidence for a display x aid interaction, *BF_HR_displayxaid* = `r sprintf(sprintf("%.2f",bf_hr_all_cond_aid))`, positive evidence for a display x signal interaction,  *BF_HR_displayxsignal* = `r sprintf(sprintf("%.2f",bf_hr_all_cond_sig))`, very strong evidence for an aid x signal interaction, *BF_HR_aidxsignal* = `r sprintf(sprintf("%.2f",bf_hr_all_aid_sig))`, and  inconclusive evidence against a display x aid x signal interaction,  *BF_HR_displayxaidxsignal* = `r sprintf(sprintf("%.2f",bf_hr_all_cond_aid_sig))`.
+
+These results indicate that aiding did not have an overall effect on hit rate for Friendly and Hostile signals but that hit rate was lower for Hostile signals than for Friendly signals. They also indicate that aiding had a larger improvement in the cumulative condition than in the static or current condition, that this effect was later for Friendly than for Hostile signals, and that aiding had a larger effect for friendly signals than for hostile signals. 
+
+
+### False Alarm Rate
+A plot of the effects of display condition and aiding on false alarm rate for Friendly and Hostile signals is shown in Figure \@ref(fig:FAR_plot).
+
+```{r FAR_plot, echo=FALSE, fig.cap="False Alarm Rate for Friend and Hostile Signals by display condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=12, fig.height=4.5}
+
+rm(list = ls())
+load(here("analysis/Model_FAR_cell_CI.Rdata"))
+load(here("analysis/Accuracy.Rdata"))
+cmat_accuracy %<>% mutate(condition = recode(condition, Static = "Static, By Event",
+                                    Current = "Dynamic, By Event",
+                                    Cumulative = "Dynamic, Cumulative")) #,
+
+# acc_friend = acc_signal %>% filter(signal == "Friendly")
+# acc_hostile = acc_signal %>% filter(signal == "Hostile")
+
+pos_dodge = 0.5
+FAR_friend_plot <- ggplot(data = Model_FAR, mapping=aes(x = condition, y = FFAR_M, fill = aided)) + 
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=3, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_FAR, mapping=aes(x = condition, ymin = FFAR_lb, ymax = FFAR_ub),
+                width = .5, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "False Alarm Rate", fill = "Aiding") +
+  geom_violin(data = cmat_accuracy, mapping=aes(x = condition, y = resp_FFA),alpha = .5, position = position_dodge(pos_dodge)) + 
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(0,1)) +
+  # stat_summary(fun.y=mean, geom="point", shape=21, size=3, stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("deepskyblue4", "deepskyblue1"))
+
+FAR_hostile_plot <- ggplot(data = Model_FAR, aes (x = condition, y = HFAR_M, fill = aided)) + 
+  geom_dotplot(data = Model_FAR, binaxis='y', stackdir='center', dotsize=3, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_FAR, mapping=aes(x = condition, ymin = HFAR_lb, ymax = HFAR_ub),width = .5,
+                position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "False Alarm Rate", fill = "Aiding") +
+  geom_violin(data = cmat_accuracy, mapping=aes(x = condition, y = resp_HFA),alpha = .5, position = position_dodge(pos_dodge)) + 
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(0,1)) +
+  # stat_summary(fun.y=mean, geom="point", shape=21, size=3, stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("firebrick4", "firebrick1"))
+
+
+grid.arrange(FAR_friend_plot,FAR_hostile_plot,ncol=2)
+
+
+```
+
+
+
+```{r open_all_FAR_params, eval=TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load("BF_all_FAR.Rdata")
+```
+The data for false alarm rate provided inconclusive evidence against a main effect of display, *BF_FAR_display* = `r sprintf(sprintf("%.2f",bf_far_all_cond))`, very strong evidence for a main effect of aid,  *BF_FAR_aid* = `r sprintf(sprintf("%.2e",bf_far_all_aid))`, and very strong evidence for a main effect of signal, *BF_FAR_signal* = `r sprintf(sprintf("%.2e",bf_far_all_sig))`. The data provided inconclusive evidence against a display x aid interaction, *BF_FAR_displayxaid* = `r sprintf(sprintf("%.2f",bf_far_all_cond_aid))`,  positive evidence against a display x signal interaction,  *BF_FAR_displayxsignal* = `r sprintf(sprintf("%.2f",bf_far_all_cond_sig))`, inconclusive evidence against an aid x signal interaction, *BF_FAR_aidxsignal* = `r sprintf(sprintf("%.2f",bf_far_all_aid_sig))`, and  positive evidence against a display x aid x signal interaction,  *BF_FAR_displayxaidxsignal* = `r sprintf(sprintf("%.2f",bf_far_all_cond_aid_sig))`. 
+
+
+This indicates that the false alarm rate was higher for Hostile signals, *M* = `r sprintf(sprintf("%.1f",all_far_mean_signal[2]*100))`% , than for Friendly signals, *M* = `r sprintf(sprintf("%.1f",all_far_mean_signal[1]*100))`% . It also indicates that providing aiding decreased false alarm rates for both Friendly and Hostile signals from *M* = `r sprintf(sprintf("%.1f",all_far_mean_aid[1]*100))`% to *M* = `r sprintf(sprintf("%.1f",all_far_mean_aid[1]*100))`% .
+
+
+### Classification Time
+A plot of the effects of display condition and aiding on classification time for Friendly and Hostile signals is shown in Figure \@ref(fig:rt_by_signal_plot).
+
+```{r rt_signal_plot, warning = FALSE, echo=FALSE, fig.cap="Mean response time for each signal type by display condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=12, fig.height=4.5}
+rm(list = ls())
+load(here("analysis/Model_RT_signal_cell_CI.Rdata"))
+load(here("analysis/RT_signal_FH.Rdata"))
+# RT_friend = RT_signal %>% filter(signal == "Friendly")
+# RT_hostile = RT_signal %>% filter(signal == "Hostile")
+# RT_civ = RT_signal %>% filter(signal == "Civilian")
+
+RT_signal_FH %<>% mutate(condition = recode(condition, Static = "Static, By Event",
+                                    Current = "Dynamic, By Event",
+                                    Cumulative = "Dynamic, Cumulative"))
+pos_dodge = 0.5
+RT_friend_plot <- ggplot(dat = Model_RT_signal, mapping=aes (x = condition, y = FRT_M, fill = aided)) +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=100, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_RT_signal, mapping=aes(x = condition, ymin = FRT_lb, ymax = FRT_ub),
+                width = .5, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Seconds", fill = "Aiding") +
+  geom_violin(data = RT_signal_FH, mapping=aes(x = condition, y = RT_F),alpha = .5, position = position_dodge(pos_dodge)) +
+  theme_classic() + ylim(0, 30) +
+  scale_fill_manual(values=c("deepskyblue4", "deepskyblue1"))
+
+RT_hostile_plot <- ggplot(dat = Model_RT_signal, mapping=aes (x = condition, y = HRT_M, fill = aided)) +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=100, binwidth = .01, position = position_dodge(pos_dodge)) +
+  geom_errorbar(data = Model_RT_signal, mapping=aes(x = condition, ymin = HRT_lb, ymax = HRT_ub),
+                width = .5, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Seconds", fill = "Aiding") +
+  geom_violin(data = RT_signal_FH, mapping=aes(x = condition, y = RT_H),alpha = .5, position = position_dodge(pos_dodge)) +
+  theme_classic() + ylim(0, 30) +
+  scale_fill_manual(values=c("firebrick4", "firebrick1"))
+
+
+
+# RT_friend_plot <- ggplot(dat = RT_friend, aes (x = condition, y = RT_mean, fill = aided)) +
+#   geom_violin(alpha = .5, position = position_dodge(pos_dodge)) +
+#   # geom_dotplot(binaxis='y', stackdir='center', dotsize=.3, binwidth = .5, position = position_dodge(pos_dodge)) +
+#   labs(title = "Friend Signal Classification Time",x = "Display Condition", y = "Seconds", fill = "Aiding Condition") +
+#   theme_classic() + ylim(0, 30) +
+#   stat_summary(fun.y=mean, geom="point", shape=21, size=3, color = "black", stroke = 1.25, aes (fill = aided), position = position_dodge(pos_dodge)) +
+#   scale_fill_manual(values=c("deepskyblue4", "deepskyblue1"))
+# 
+# RT_hostile_plot <- ggplot(dat = RT_hostile, aes (x = condition, y = RT_mean, fill = aided)) +
+#   geom_violin(alpha = .5, position = position_dodge(pos_dodge)) +
+#   # geom_dotplot(binaxis='y', stackdir='center', dotsize=.3, binwidth = .5, position = position_dodge(pos_dodge)) +
+#   labs(title = "Hostile Signal Classification Time",x = "Display Condition", y = "Seconds", fill = "Aiding Condition") +
+#   theme_classic() + ylim(0, 30) +
+#   stat_summary(fun.y=mean, geom="point", shape=21, size=3, color = "black", stroke = 1.25, aes (fill = aided), position = position_dodge(pos_dodge)) +
+#   scale_fill_manual(values=c("firebrick4", "firebrick1"))
+
+grid.arrange(RT_friend_plot,RT_hostile_plot,ncol=2)
+
+
+
+```
+
+
+```{r open_all_rt_signal_params, eval=TRUE, warning=FALSE, include=FALSE}
+rm(list = ls())
+load("BF_all_rt_signal.Rdata")
+```
+The data for response time  provided positive evidence for a main effect of display,  *BF_rt_display* = `r sprintf(sprintf("%.2f",bf_rt_all_cond))`, inconclusive evidence for a main effect of aiding, *BF_rt_aid* = `r sprintf(sprintf("%.2f",bf_rt_all_aid))`, and strong evidence for a main effect of signal, *BF_rt_signal* = `r sprintf(sprintf("%.2f",bf_rt_all_sig))`. The data provided positive evidence against a display x aid interaction, *BF_rt_displayxaid* = `r sprintf(sprintf("%.2f",bf_rt_all_cond_aid))`, positive evidence against a display x signal interaction, *BF_rt_displayxsignal* = `r sprintf(sprintf("%.2f",bf_rt_all_cond_sig))`, positive evidence against an aid x signal interaction, *BF_rt_aidxsignal* = `r sprintf(sprintf("%.2f",bf_rt_all_aid_sig))`, and positive evidence against a display x aid x signal interaction, *BF_rt_displayxaidxsignal* = `r sprintf(sprintf("%.2f",bf_rt_all_cond_aid_sig))`.
+
+
+This indicates that decision times for Friendly and Hostile signals were slower in the dynamic display, *M* = `r sprintf(sprintf("%.1f",all_rt_mean_cond[2]))` seconds , than in the static display, *M* = `r sprintf(sprintf("%.1f",all_rt_mean_cond[1]))` seconds . Response time was also slower for  Hostile signals, *M* = `r sprintf(sprintf("%.1f",all_rt_mean_signal[2]))` seconds , than for Friendly signals, *M* = `r sprintf(sprintf("%.1f",all_rt_mean_signal[1]))` seconds .
+
+
+
+
+### Summary of Friendly and Hostile Signal Results
+
+Friendly signals have higher HR and lower FAR than Hostile signals (consistent with d' difference)  
+Friendly HR and FAR closer to benchmark than Hostile HR and FAR (consistent wit d' difference)  
+Friendly HR lower than benchmark, Hostile HR higher than benchmark (not sure why both not positive, perhaps noise in Friend HR data?)  
+Friendly and Hostile FAR higher than benchmark (consistend with sluggiush beta effect)  
+Friendly signals have lower RT than Hostile signals (consistent with d' difference if threshold being used?)   
+Current aiding reduces FAR and brings FAR closer to benchmark for Friendly and Hostile signals but no main effect on HR. (Better sensitiviety and bias?)  
+Greater effect for Hostile signals than Friendly signals. (Suggests that current aiding relied on for more difficult decisions?)   
+Current aiding increases RT for both Friendly and Hostile signals. (Suggests aiding being used to supplement information from gauges?)  
+Dynamic display brings HR closer to benchmark but no main effecton HR. (Not sure why. Noise effect?)    
+Dynamic display increases RT for both Friendly and Hostile signals.  
+Cumulative aiding increases HR for Friendly and Hostile signals but no effect on benchmark HR.  
+No effect of cumulative aiding on FAR or benchmark FAR for Friedly and Hostile signals.  
+
+
+
+# Discussion
+
+
+
+
+
+
+
+
+
+
+```{r norm_plot, eval=FALSE, echo=FALSE,  fig.width=4, fig.height=4}
+
+# rm(list = ls())
+load("Accuracy.Rdata")
+
+pos_dodge = 0.5
+Norm_acc_plot <- ggplot(dat = cmat_accuracy, aes (x = condition, y = norm_acc, fill = aided)) + 
+  geom_violin(alpha = .5, position = position_dodge(pos_dodge)) + 
+  # geom_dotplot(binaxis='y', stackdir='center', dotsize=.2, binwidth = .02, position = position_dodge(pos_dodge)) +
+  labs(x = "Display Condition", y = "Classification Accuracy - Benchmark Accuracy", fill = "Aiding Condition") +
+  theme_classic() + scale_y_continuous(labels = percent) +
+  stat_summary(fun.y=mean, geom="point", shape=21, size=3, color = "black", stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("darkorange4", "darkorange1"))
+
+ # Norm_acc_plot
+```
+
+
+
+```{r Bench_HR_plot, eval=FALSE, echo=FALSE, fig.cap="Difference between Response and Normative Hit Rate for Friend and Hostile signals by display  condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=8, fig.height=4}
+
+rm(list = ls())
+load("Acc_signal.Rdata")
+acc_friend = acc_signal %>% filter(signal == "Friendly")
+acc_hostile = acc_signal %>% filter(signal == "Hostile")
+
+pos_dodge = 0.5
+min_scale = -0.8
+max_scale = 0.8
+norm_HR_friend_plot = ggplot(dat = acc_friend, aes (x = condition, y = norm_dif_HR, fill = aided)) + 
+  geom_violin(alpha = .25, position = position_dodge(pos_dodge)) + 
+  # geom_dotplot(binaxis='y', stackdir='center', dotsize=.2, binwidth = .02, position = position_dodge(pos_dodge)) +
+  labs(title = "Friend Signal Trials", x = "Display Condition", y = "Hit Rate - Benchmark Performance", fill = "Aiding Condition") +
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(min_scale,max_scale)) +
+  stat_summary(fun.y=mean, geom="point", shape=21, size=3, color = "black", stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("deepskyblue4", "deepskyblue1"))
+
+norm_HR_hostile_plot = ggplot(dat = acc_hostile, aes (x = condition, y = norm_dif_HR, fill = aided)) + 
+  geom_violin(alpha = .25, position = position_dodge(pos_dodge)) + 
+  # geom_dotplot(binaxis='y', stackdir='center', dotsize=.2, binwidth = .02, position = position_dodge(pos_dodge)) +
+  labs(title = "Hostile Signal Trials", x = "Display Condition", y = "Hit Rate - Benchmark Performance", fill = "Aiding Condition") +
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(min_scale,max_scale)) +
+  stat_summary(fun.y=mean, geom="point", shape=21, size=3, color = "black", stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("firebrick4", "firebrick1"))
+
+#grid.arrange(norm_HR_friend_plot,norm_HR_hostile_plot,ncol=2)
+
+
+```
+
+```{r Bench_FAR_plot, eval=FALSE, echo=FALSE, fig.cap="Difference between Response and Normative False Alarm Rate for Friend and Hostile signals by display condition (Static, Current, Cumulative) and aiding (Unaided,Aided).", fig.width=8, fig.height=4}
+
+rm(list = ls())
+load("Acc_signal.Rdata")
+acc_friend = acc_signal %>% filter(signal == "Friendly")
+acc_hostile = acc_signal %>% filter(signal == "Hostile")
+
+pos_dodge = 0.5
+min_scale = -0.8
+max_scale = 0.8
+norm_FAR_friend_plot = ggplot(dat = acc_friend, aes (x = condition, y = norm_dif_FAR, fill = aided)) + 
+  geom_violin(alpha = .25, position = position_dodge(pos_dodge)) + 
+  # geom_dotplot(binaxis='y', stackdir='center', dotsize=.2, binwidth = .02, position = position_dodge(pos_dodge)) +
+  labs(title = "Friend Noise Trials", x = "Display Condition", y = "False Alarm Rate - Benchmark Performance", fill = "Aiding Condition") +
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(min_scale,max_scale)) +
+  stat_summary(fun.y=mean, geom="point", shape=21, size=3, color = "black", stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("deepskyblue4", "deepskyblue1"))
+
+norm_FAR_hostile_plot = ggplot(dat = acc_hostile, aes (x = condition, y = norm_dif_FAR, fill = aided)) + 
+  geom_violin(alpha = .25, position = position_dodge(pos_dodge)) + 
+  # geom_dotplot(binaxis='y', stackdir='center', dotsize=.2, binwidth = .02, position = position_dodge(pos_dodge)) +
+  labs(title = "Hostile Noise Trials", x = "Display Condition", y = "False Alarm Rate - Benchmark Performance", fill = "Aiding Condition") +
+  theme_classic() + scale_y_continuous(labels = percent, limits = c(min_scale,max_scale)) +
+  stat_summary(fun.y=mean, geom="point", shape=21, size=3, color = "black", stroke = 1.25, aes (fill = aided),position = position_dodge(pos_dodge)) +
+  scale_fill_manual(values=c("firebrick4", "firebrick1"))
+
+#grid.arrange(norm_FAR_friend_plot,norm_FAR_hostile_plot,ncol=2)
+
+
+```
+
+
+
+
+
+
+
